@@ -7,10 +7,23 @@
 #include <chrono>
 #include <ctime>
 #include <algorithm>
+#include <sstream>
+#include <iomanip>
 
 static std::mutex g_collectMutex;
 static std::vector<long> g_collectedPrimes;
 static std::mutex g_printMutex;
+
+void printCurrentTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm* now_tm = std::localtime(&now_c);
+
+    char buffer[30];
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", now_tm);
+    std::cout << buffer << '.' << std::setfill('0') << std::setw(3) << ms.count();
+}
 
 void readConfig(const std::string& filename, long &threads, long &maxNumber)
 {
@@ -64,8 +77,7 @@ void readConfig(const std::string& filename, long &threads, long &maxNumber)
 //   A1: Print primes immediately from each thread.
 //   A2: Collect primes in a global vector and print them all at the end.
 // ============================================================================
-bool isPrimeSingleThread(long n)
-{
+bool isPrimeSingleThread(long n) {
     if (n < 2) return false;
     if (n == 2) return true;
     if (n % 2 == 0) return false;
@@ -82,21 +94,15 @@ bool isPrimeSingleThread(long n)
 void workerRangeSchemeA(long threadId,
                         long startNum,
                         long endNum,
-                        bool printImmediately)
-{
-    for (long n = startNum; n <= endNum; ++n)
-    {
-        if (isPrimeSingleThread(n))
-        {
+                        bool printImmediately) {
+    for (long n = startNum; n <= endNum; ++n) {
+        if (isPrimeSingleThread(n)) {
             if (printImmediately) {
-                // Print right now
                 std::lock_guard<std::mutex> lk(g_printMutex);
-                std::cout << "[Thread " << threadId
-                          << "] Found prime: " << n
-                          << " (time=" << std::time(nullptr) << ")\n";
-            }
-            else {
-                // Print later
+                std::cout << "[Thread " << threadId << "] Found prime: " << n << " (Timestamp: ";
+                printCurrentTimestamp();
+                std::cout << ")\n";
+            } else {
                 std::lock_guard<std::mutex> lk(g_collectMutex);
                 g_collectedPrimes.push_back(n);
             }
@@ -117,17 +123,14 @@ void workerRangeSchemeA(long threadId,
 // ============================================================================
 void workerCheckDivRange(long n, long startDiv, long endDiv,
                          bool &compositeFound,
-                         std::mutex &flagMutex)
-{
-    for (long d = startDiv; d <= endDiv; ++d)
-    {
+                         std::mutex &flagMutex) {
+    for (long d = startDiv; d <= endDiv; ++d) {
         // Early exit if already found a divisor
         {
             std::lock_guard<std::mutex> guard(flagMutex);
             if (compositeFound) return;
         }
-        if (n % d == 0)
-        {
+        if (n % d == 0) {
             std::lock_guard<std::mutex> guard(flagMutex);
             compositeFound = true;
             return;
@@ -135,8 +138,7 @@ void workerCheckDivRange(long n, long startDiv, long endDiv,
     }
 }
 
-bool isPrimeByDivisorThreads(long n, long numThreads)
-{
+bool isPrimeByDivisorThreads(long n, long numThreads) {
     if (n < 2)  return false;
     if (n == 2) return true;
     if (n % 2 == 0) return false;
@@ -169,8 +171,7 @@ bool isPrimeByDivisorThreads(long n, long numThreads)
     threads.reserve(numThreads);
 
     long startIndex = 0;
-    for (long t = 0; t < numThreads; ++t)
-    {
+    for (long t = 0; t < numThreads; ++t) {
         long endIndex = (t == numThreads - 1)
                        ? (totalDivs - 1)
                        : (startIndex + chunkSize - 1);
@@ -197,21 +198,16 @@ bool isPrimeByDivisorThreads(long n, long numThreads)
     return !compositeFound;
 }
 
-void runSchemeB(long maxNumber, long numThreads, bool printImmediately)
-{
-    for (long n = 2; n <= maxNumber; ++n)
-    {
+void runSchemeB(long maxNumber, long numThreads, bool printImmediately) {
+    for (long n = 2; n <= maxNumber; ++n) {
         bool prime = isPrimeByDivisorThreads(n, numThreads);
-        if (prime)
-        {
-            if (printImmediately)
-            {
+        if (prime) {
+            if (printImmediately) {
                 std::lock_guard<std::mutex> lk(g_printMutex);
-                std::cout << "[B-scheme] Found prime: " << n
-                          << " (time=" << std::time(nullptr) << ")\n";
-            }
-            else
-            {
+                std::cout << "[Scheme B] Found prime: " << n << " (Timestamp: ";
+                printCurrentTimestamp();
+                std::cout << ")\n";
+            } else {
                 std::lock_guard<std::mutex> lk(g_collectMutex);
                 g_collectedPrimes.push_back(n);
             }
@@ -219,8 +215,7 @@ void runSchemeB(long maxNumber, long numThreads, bool printImmediately)
     }
 }
 
-int main()
-{
+int main() {
     // 1) Read config
     long numThreads = 0;
     long maxNumber = 0;
@@ -240,8 +235,8 @@ int main()
         std::cin >> choice;
 
         if (std::cin.fail() || choice < 1 || choice > 4) {
-            std::cin.clear(); // Clear the error flag
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Discard invalid input
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::cerr << "Invalid choice. Please enter a number between 1 and 4.\n";
         }
     } while (choice < 1 || choice > 4);
@@ -250,7 +245,9 @@ int main()
 
     auto startTime = std::chrono::steady_clock::now();
     std::time_t startWallClock = std::time(nullptr);
-    std::cout << "\n=== Run started at " << std::ctime(&startWallClock) << std::endl;
+    std::cout << "\n=== Run started at ";
+    printCurrentTimestamp();
+    std::cout << "\n";
 
     g_collectedPrimes.clear();
 
@@ -258,13 +255,11 @@ int main()
     std::vector<std::thread> threadsA;
     threadsA.reserve(numThreads);
 
-    if (choice == 1 || choice == 2)
-    {
+    if (choice == 1 || choice == 2) {
         // Scheme A
         long rangeSize = maxNumber / numThreads;
         long start = 1;
-        for (long i = 0; i < numThreads; ++i)
-        {
+        for (long i = 0; i < numThreads; ++i) {
             long end = (i == numThreads - 1)
                       ? maxNumber
                       : (start + rangeSize - 1);
@@ -276,14 +271,10 @@ int main()
                                   printImmediately);
             start = end + 1;
         }
-    }
-    else if (choice == 3 || choice == 4)
-    {
+    } else if (choice == 3 || choice == 4) {
         // Scheme B
         runSchemeB(maxNumber, numThreads, printImmediately);
-    }
-    else
-    {
+    } else {
         std::cerr << "Invalid choice.\n";
         return 1;
     }
@@ -294,8 +285,7 @@ int main()
     }
 
     // 6) If printing is to be done after
-    if (!printImmediately)
-    {
+    if (!printImmediately) {
         std::sort(g_collectedPrimes.begin(), g_collectedPrimes.end());
         std::cout << "\n=== Primes found:\n";
         for (long p : g_collectedPrimes) {
@@ -307,10 +297,11 @@ int main()
     // 7) Print end time and total elapsed
     auto endTime = std::chrono::steady_clock::now();
     std::time_t endWallClock = std::time(nullptr);
-    std::cout << "\n=== Run ended at " << std::ctime(&endWallClock) << std::endl;
+    std::cout << "\n=== Run ended at ";
+    printCurrentTimestamp();
+    std::cout << "\n";
 
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                       endTime - startTime).count();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
     std::cout << "Total elapsed time: " << elapsed << " ms\n\n";
 
     return 0;
