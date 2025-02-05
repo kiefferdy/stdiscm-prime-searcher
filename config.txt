@@ -1,2 +1,2 @@
-threads=4
-maxNumber=100000
+threads=8
+maxNumber=10000

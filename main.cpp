@@ -12,7 +12,8 @@ static std::mutex g_collectMutex;
 static std::vector<long> g_collectedPrimes;
 static std::mutex g_printMutex;
 
-void readConfig(const std::string& filename, long &threads, long &maxNumber) {
+void readConfig(const std::string& filename, long &threads, long &maxNumber)
+{
     std::ifstream inFile(filename);
     if (!inFile.is_open()) {
         std::cerr << "Could not open config file: " << filename << std::endl;
@@ -20,14 +21,38 @@ void readConfig(const std::string& filename, long &threads, long &maxNumber) {
     }
 
     std::string line;
+    bool threadsSet = false, maxNumberSet = false;
+
     while (std::getline(inFile, line)) {
         if (line.rfind("threads=", 0) == 0) {
-            threads = std::stol(line.substr(8));
+            std::string value = line.substr(8);
+            try {
+                threads = std::stol(value);
+                if (threads <= 0) throw std::invalid_argument("Non-positive threads");
+                threadsSet = true;
+            } catch (...) {
+                std::cerr << "Invalid thread count in config: " << value << std::endl;
+                std::exit(1);
+            }
         } else if (line.rfind("maxNumber=", 0) == 0) {
-            maxNumber = std::stol(line.substr(10));
+            std::string value = line.substr(10);
+            try {
+                maxNumber = std::stol(value);
+                if (maxNumber <= 1) throw std::invalid_argument("Invalid max number");
+                maxNumberSet = true;
+            } catch (...) {
+                std::cerr << "Invalid max number in config: " << value << std::endl;
+                std::exit(1);
+            }
         }
     }
+
     inFile.close();
+
+    if (!threadsSet || !maxNumberSet) {
+        std::cerr << "Config file is missing 'threads=' or 'maxNumber=' entries." << std::endl;
+        std::exit(1);
+    }
 }
 
 // ============================================================================
@@ -204,14 +229,22 @@ int main()
               << ", maxNumber=" << maxNumber << "\n\n";
 
     // 2) Let user pick which scheme (A or B) and print mode
-    std::cout << "Choose approach:\n"
-              << "  1) Scheme A (range partition) + immediate printing\n"
-              << "  2) Scheme A (range partition) + print after\n"
-              << "  3) Scheme B (divisor-splitting, up to sqrt) + immediate printing\n"
-              << "  4) Scheme B (divisor-splitting, up to sqrt) + print after\n"
-              << "Enter choice: ";
     int choice;
-    std::cin >> choice;
+    do {
+        std::cout << "Choose approach:\n"
+                  << "  1) Scheme A (range partition) + immediate printing\n"
+                  << "  2) Scheme A (range partition) + print after\n"
+                  << "  3) Scheme B (divisor-splitting, up to sqrt) + immediate printing\n"
+                  << "  4) Scheme B (divisor-splitting, up to sqrt) + print after\n"
+                  << "Enter choice (1-4): ";
+        std::cin >> choice;
+
+        if (std::cin.fail() || choice < 1 || choice > 4) {
+            std::cin.clear(); // Clear the error flag
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Discard invalid input
+            std::cerr << "Invalid choice. Please enter a number between 1 and 4.\n";
+        }
+    } while (choice < 1 || choice > 4);
 
     bool printImmediately = (choice == 1 || choice == 3);
 
