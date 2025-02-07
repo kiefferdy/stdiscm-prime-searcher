@@ -91,15 +91,15 @@ bool isPrimeSingleThread(long n) {
     return true;
 }
 
-void workerRangeSchemeA(long threadId,
-                        long startNum,
-                        long endNum,
-                        bool printImmediately) {
+void workerRangeSchemeA(long threadId, long startNum, long endNum, bool printImmediately) {
+    std::thread::id actualThreadId = std::this_thread::get_id();
+
     for (long n = startNum; n <= endNum; ++n) {
         if (isPrimeSingleThread(n)) {
             if (printImmediately) {
                 std::lock_guard<std::mutex> lk(g_printMutex);
-                std::cout << "[Thread " << threadId << "] Found prime: " << n << " (Timestamp: ";
+                std::cout << "[Thread " << threadId << " (Thread ID: " << actualThreadId << ")] Found prime: " 
+                          << n << " (Timestamp: ";
                 printCurrentTimestamp();
                 std::cout << ")\n";
             } else {
@@ -204,7 +204,8 @@ void runSchemeB(long maxNumber, long numThreads, bool printImmediately) {
         if (prime) {
             if (printImmediately) {
                 std::lock_guard<std::mutex> lk(g_printMutex);
-                std::cout << "[Scheme B] Found prime: " << n << " (Timestamp: ";
+                std::cout << "[Thread ID: " << std::this_thread::get_id() << "] Found prime: " 
+                          << n << " (Timestamp: ";
                 printCurrentTimestamp();
                 std::cout << ")\n";
             } else {
